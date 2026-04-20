@@ -9,68 +9,98 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: sans-serif; background: #0a0a0a; color: #fff; }
   #header {
-    display: flex; align-items: center; gap: 12px;
-    padding: 12px 20px; background: #111; border-bottom: 1px solid #222;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 16px; background: #111; border-bottom: 1px solid #222;
   }
   #header svg { flex-shrink: 0; }
-  #header h1 { font-size: 16px; font-weight: 400; letter-spacing: 1px; }
-  #header span { margin-left: auto; font-size: 12px; color: #666; }
-  #map { width: 100vw; height: calc(100vh - 49px); }
+  #header h1 { font-size: 15px; font-weight: 400; letter-spacing: 1px; margin-right: auto; }
+  #header input, #header select, #header button {
+    font-size: 12px; padding: 5px 10px; border-radius: 5px;
+    border: 1px solid #333; background: #1a1a1a; color: #fff; outline: none;
+  }
+  #header button {
+    background: #cc0000; border-color: #cc0000; cursor: pointer; font-weight: 600;
+  }
+  #header button:hover { background: #aa0000; }
+  #header button:disabled { background: #555; border-color: #555; cursor: not-allowed; }
+  #header input { width: 220px; }
+  #map { width: 100vw; height: calc(100vh - 52px); }
   .leaflet-popup-content-wrapper {
     background: #1a1a1a; color: #fff; border: 1px solid #333;
     border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.6);
   }
   .leaflet-popup-tip { background: #1a1a1a; }
-  .leaflet-popup-content { margin: 12px 16px; min-width: 160px; }
+  .leaflet-popup-content { margin: 12px 16px; min-width: 180px; }
   .popup-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
   .popup-stalls { font-size: 12px; color: #cc0000; margin-bottom: 2px; }
   .popup-address { font-size: 11px; color: #888; }
   .popup-v3 { display: inline-block; margin-top: 6px; font-size: 10px;
     background: #cc0000; color: #fff; padding: 2px 6px; border-radius: 3px; }
+  .popup-wine { font-size: 11px; color: #c9a84c; margin-top: 6px; line-height: 1.5; }
+  .popup-wine-title { font-size: 12px; color: #e8c96d; font-weight: 600; margin-top: 6px; }
+  #panel {
+    display: none; position: fixed; bottom: 0; left: 0; right: 0;
+    background: #111; border-top: 1px solid #333; padding: 12px 16px;
+    max-height: 35vh; overflow-y: auto; z-index: 1000; font-size: 13px; line-height: 1.7;
+  }
+  #panel h3 { color: #e8c96d; margin-bottom: 8px; font-size: 14px; }
+  #panel ul { padding-left: 18px; color: #ccc; }
+  #panel li { margin-bottom: 4px; }
+  #panel-close {
+    float: right; cursor: pointer; color: #888; font-size: 18px; line-height: 1;
+  }
+  #panel-close:hover { color: #fff; }
 </style>
 </head>
 <body>
 
 <div id="header">
-  <!-- Tesla T logo -->
-  <svg width="24" height="28" viewBox="0 0 300 350" fill="#cc0000">
+  <svg width="22" height="26" viewBox="0 0 300 350" fill="#cc0000">
     <path d="M150 0 C100 0 0 20 0 20 C0 20 20 80 150 80 C280 80 300 20 300 20 C300 20 200 0 150 0Z"/>
     <path d="M150 80 L80 80 L150 350 L220 80 Z"/>
   </svg>
-  <h1>TESLA SUPERCHARGERS &nbsp;·&nbsp; PIEMONTE</h1>
-  <span id="count"></span>
+  <h1>TESLA SUPERCHARGERS · PIEMONTE</h1>
+  <input type="password" id="apiKey" placeholder="Paste Gemini API key…" autocomplete="off"/>
+  <select id="modelSelect">
+    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+    <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
+    <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+    <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+  </select>
+  <button id="wineBtn" onclick="findWine()">🍷 Find Wine Tastings</button>
 </div>
 
 <div id="map"></div>
 
+<div id="panel">
+  <span id="panel-close" onclick="document.getElementById('panel').style.display='none'">✕</span>
+  <h3 id="panel-title"></h3>
+  <div id="panel-content"></div>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const map = L.map("map", {
-  center: [44.95, 7.90],
-  zoom: 8,
-  zoomControl: true,
-});
+const map = L.map("map", { center: [44.95, 7.90], zoom: 8 });
 
 L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-  attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OSM contributors',
-  maxZoom: 19,
+  attribution: '&copy; CARTO &copy; OSM contributors', maxZoom: 19,
 }).addTo(map);
 
-function makeIcon(kw) {
-  const color = kw >= 250 ? '#cc0000' : kw >= 150 ? '#990000' : '#660000';
+function makeIcon(kw, wine) {
+  const color = wine ? '#c9a84c' : kw >= 250 ? '#cc0000' : '#880000';
+  const symbol = wine ? '🍷' : '⚡';
   return L.divIcon({
     className: "",
     html: `<svg width="28" height="36" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg">
       <ellipse cx="14" cy="34" rx="5" ry="2" fill="rgba(0,0,0,0.3)"/>
       <path d="M14 0 C6.3 0 0 6.3 0 14 C0 24 14 36 14 36 C14 36 28 24 28 14 C28 6.3 21.7 0 14 0Z"
             fill="${color}" stroke="#fff" stroke-width="1.5"/>
-      <text x="14" y="19" text-anchor="middle" font-size="11" font-weight="bold"
-            fill="white" font-family="sans-serif">⚡</text>
+      <text x="14" y="20" text-anchor="middle" font-size="10"
+            fill="white" font-family="sans-serif">${symbol}</text>
     </svg>`,
     iconSize: [28, 36], iconAnchor: [14, 36], popupAnchor: [0, -36],
   });
 }
-
 
 const stations = [
   { name: "Tesla Supercharger Torino Nord",      lat: 45.1093, lng: 7.6681, stalls: 12, kw: 250, addr: "Via Lanzo, Torino" },
@@ -87,10 +117,10 @@ const stations = [
   { name: "Tesla Supercharger Gravellona Toce",  lat: 45.9227, lng: 8.4295, stalls: 8,  kw: 250, addr: "A26 Area di servizio, Gravellona Toce" },
 ];
 
-document.getElementById("count").textContent = stations.length + " stations · OSM data";
+const wineMarkers = [];
 
 stations.forEach(sc => {
-  const marker = L.marker([sc.lat, sc.lng], { icon: makeIcon(sc.kw) }).addTo(map);
+  const marker = L.marker([sc.lat, sc.lng], { icon: makeIcon(sc.kw, false) }).addTo(map);
   marker.bindPopup(`
     <div class="popup-name">${sc.name}</div>
     <div class="popup-stalls">⚡ ${sc.stalls} stalls · ${sc.kw} kW</div>
@@ -98,6 +128,66 @@ stations.forEach(sc => {
     ${sc.kw >= 250 ? '<span class="popup-v3">V3 · 250kW</span>' : ''}
   `);
 });
+
+async function findWine() {
+  const key = document.getElementById("apiKey").value.trim();
+  if (!key) { alert("Please paste your Gemini API key first."); return; }
+
+  const model = document.getElementById("modelSelect").value;
+  const btn = document.getElementById("wineBtn");
+  btn.disabled = true;
+  btn.textContent = "Loading…";
+
+  wineMarkers.forEach(m => map.removeLayer(m));
+  wineMarkers.length = 0;
+
+  const prompt = `You are a Piemonte wine expert. List 10 well-known wine tasting locations (cantine, wineries, or enoteca) in Piemonte, Italy.
+For each, return ONLY a JSON array with no markdown, no explanation, just raw JSON like this:
+[{"name":"Cantina XYZ","city":"Barolo","lat":44.61,"lng":7.94,"description":"Famous for Barolo wine, founded in 1900."}]
+Include accurate GPS coordinates for each location.`;
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      }
+    );
+
+    if (!res.ok) throw new Error("Gemini API error: HTTP " + res.status);
+    const data = await res.json();
+    let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    // Strip markdown code blocks if present
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    const wines = JSON.parse(text);
+
+    wines.forEach(w => {
+      const m = L.marker([w.lat, w.lng], { icon: makeIcon(0, true) }).addTo(map);
+      m.bindPopup(`
+        <div class="popup-wine-title">🍷 ${w.name}</div>
+        <div class="popup-address">${w.city}</div>
+        <div class="popup-wine">${w.description}</div>
+      `);
+      wineMarkers.push(m);
+    });
+
+    const panel = document.getElementById("panel");
+    document.getElementById("panel-title").textContent = `🍷 Wine Tasting Locations in Piemonte (via ${model})`;
+    document.getElementById("panel-content").innerHTML =
+      "<ul>" + wines.map(w => `<li><strong>${w.name}</strong> — ${w.city}: ${w.description}</li>`).join("") + "</ul>";
+    panel.style.display = "block";
+
+  } catch (e) {
+    alert("Error: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🍷 Find Wine Tastings";
+  }
+}
 </script>
 </body>
 </html>
