@@ -45,14 +45,6 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-// Piemonte bounding box
-const BOUNDS = { minLat: 43.8, maxLat: 46.5, minLng: 6.6, maxLng: 9.2 };
-
-const PIEMONTE_PROVINCES = [
-  "torino","cuneo","asti","alessandria","novara",
-  "vercelli","biella","verbano","verbania","piemonte","piedmont"
-];
-
 const map = L.map("map", {
   center: [44.95, 7.90],
   zoom: 8,
@@ -79,43 +71,47 @@ function makeIcon(kw) {
   });
 }
 
-function inPiemonte(site) {
-  const { lat, lng } = site.gps;
-  if (lat < BOUNDS.minLat || lat > BOUNDS.maxLat || lng < BOUNDS.minLng || lng > BOUNDS.maxLng) return false;
-  const haystack = [
-    site.address?.city, site.address?.state, site.address?.region
-  ].filter(Boolean).join(" ").toLowerCase();
-  return PIEMONTE_PROVINCES.some(p => haystack.includes(p));
-}
 
 async function loadSuperchargers() {
-  try {
-    const res = await fetch("https://supercharge.info/service/superchargers/allSites");
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const sites = await res.json();
-
-    const piemonte = sites.filter(s =>
-      s.address?.country === "Italy" && inPiemonte(s)
+  // Overpass API: query all Tesla Superchargers in Piemonte (Italy) bounding box
+  const query = `
+    [out:json][timeout:25];
+    (
+      node["amenity"="charging_station"]["network"~"Tesla","i"]["name"~"Supercharger","i"]
+           (43.8,6.6,46.5,9.2);
+      node["amenity"="charging_station"]["operator"~"Tesla","i"]["name"~"Supercharger","i"]
+           (43.8,6.6,46.5,9.2);
     );
+    out body;
+  `;
+  try {
+    const res = await fetch("https://overpass-api.de/api/interpreter", {
+      method: "POST",
+      body: "data=" + encodeURIComponent(query),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const json = await res.json();
+    const elements = json.elements;
 
-    document.getElementById("count").textContent = piemonte.length + " stations · supercharge.info";
+    document.getElementById("count").textContent = elements.length + " stations · OpenStreetMap";
 
-    piemonte.forEach(sc => {
-      const kw = sc.powerKilowatt || 0;
-      const stalls = sc.stalls || "?";
-      const addr = [sc.address?.street, sc.address?.city].filter(Boolean).join(", ");
-      const status = sc.status === "OPEN" ? "🟢 Open" : sc.status === "CONSTRUCTION" ? "🟡 Coming soon" : sc.status;
-      const marker = L.marker([sc.gps.lat, sc.gps.lng], { icon: makeIcon(kw) }).addTo(map);
+    elements.forEach(el => {
+      const tags = el.tags || {};
+      const name = tags.name || tags["name:en"] || "Tesla Supercharger";
+      const stalls = tags["capacity"] || tags["charging_station:output"] || "?";
+      const kw = parseInt(tags["maxpower"] || tags["socket:type2_combo:output"] || "0") || 0;
+      const addr = [tags["addr:street"], tags["addr:city"]].filter(Boolean).join(", ");
+
+      const marker = L.marker([el.lat, el.lon], { icon: makeIcon(kw) }).addTo(map);
       marker.bindPopup(`
-        <div class="popup-name">${sc.name}</div>
+        <div class="popup-name">${name}</div>
         <div class="popup-stalls">⚡ ${stalls} stalls${kw ? ' · ' + kw + ' kW' : ''}</div>
-        <div class="popup-address">${addr}</div>
-        <div style="margin-top:6px;font-size:11px;color:#aaa">${status}</div>
+        ${addr ? `<div class="popup-address">${addr}</div>` : ''}
         ${kw >= 250 ? '<span class="popup-v3">V3 · 250kW</span>' : ''}
       `);
     });
 
-    if (piemonte.length === 0) showError("No Piemonte stations found in API response.");
+    if (elements.length === 0) showError("No stations found — OSM data may be incomplete.");
   } catch (err) {
     showError("Could not load live data: " + err.message);
   }
