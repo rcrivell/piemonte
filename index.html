@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tesla Superchargers – Piemonte</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: sans-serif; background: #0a0a0a; color: #fff; }
+  #header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 20px; background: #111; border-bottom: 1px solid #222;
+  }
+  #header svg { flex-shrink: 0; }
+  #header h1 { font-size: 16px; font-weight: 400; letter-spacing: 1px; }
+  #header span { margin-left: auto; font-size: 12px; color: #666; }
+  #map { width: 100vw; height: calc(100vh - 49px); }
+  .leaflet-popup-content-wrapper {
+    background: #1a1a1a; color: #fff; border: 1px solid #333;
+    border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  }
+  .leaflet-popup-tip { background: #1a1a1a; }
+  .leaflet-popup-content { margin: 12px 16px; min-width: 160px; }
+  .popup-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .popup-stalls { font-size: 12px; color: #cc0000; margin-bottom: 2px; }
+  .popup-address { font-size: 11px; color: #888; }
+  .popup-v3 { display: inline-block; margin-top: 6px; font-size: 10px;
+    background: #cc0000; color: #fff; padding: 2px 6px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <!-- Tesla T logo -->
+  <svg width="24" height="28" viewBox="0 0 300 350" fill="#cc0000">
+    <path d="M150 0 C100 0 0 20 0 20 C0 20 20 80 150 80 C280 80 300 20 300 20 C300 20 200 0 150 0Z"/>
+    <path d="M150 80 L80 80 L150 350 L220 80 Z"/>
+  </svg>
+  <h1>TESLA SUPERCHARGERS &nbsp;·&nbsp; PIEMONTE</h1>
+  <span id="count"></span>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// Piemonte bounding box
+const BOUNDS = { minLat: 43.8, maxLat: 46.5, minLng: 6.6, maxLng: 9.2 };
+
+const PIEMONTE_PROVINCES = [
+  "torino","cuneo","asti","alessandria","novara",
+  "vercelli","biella","verbano","verbania","piemonte","piedmont"
+];
+
+const map = L.map("map", {
+  center: [44.95, 7.90],
+  zoom: 8,
+  zoomControl: true,
+});
+
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+  attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OSM contributors',
+  maxZoom: 19,
+}).addTo(map);
+
+function makeIcon(kw) {
+  const color = kw >= 250 ? '#cc0000' : kw >= 150 ? '#990000' : '#660000';
+  return L.divIcon({
+    className: "",
+    html: `<svg width="28" height="36" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="14" cy="34" rx="5" ry="2" fill="rgba(0,0,0,0.3)"/>
+      <path d="M14 0 C6.3 0 0 6.3 0 14 C0 24 14 36 14 36 C14 36 28 24 28 14 C28 6.3 21.7 0 14 0Z"
+            fill="${color}" stroke="#fff" stroke-width="1.5"/>
+      <text x="14" y="19" text-anchor="middle" font-size="11" font-weight="bold"
+            fill="white" font-family="sans-serif">⚡</text>
+    </svg>`,
+    iconSize: [28, 36], iconAnchor: [14, 36], popupAnchor: [0, -36],
+  });
+}
+
+function inPiemonte(site) {
+  const { lat, lng } = site.gps;
+  if (lat < BOUNDS.minLat || lat > BOUNDS.maxLat || lng < BOUNDS.minLng || lng > BOUNDS.maxLng) return false;
+  const haystack = [
+    site.address?.city, site.address?.state, site.address?.region
+  ].filter(Boolean).join(" ").toLowerCase();
+  return PIEMONTE_PROVINCES.some(p => haystack.includes(p));
+}
+
+async function loadSuperchargers() {
+  try {
+    const res = await fetch("https://supercharge.info/service/superchargers/allSites");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const sites = await res.json();
+
+    const piemonte = sites.filter(s =>
+      s.address?.country === "Italy" && inPiemonte(s)
+    );
+
+    document.getElementById("count").textContent = piemonte.length + " stations · supercharge.info";
+
+    piemonte.forEach(sc => {
+      const kw = sc.powerKilowatt || 0;
+      const stalls = sc.stalls || "?";
+      const addr = [sc.address?.street, sc.address?.city].filter(Boolean).join(", ");
+      const status = sc.status === "OPEN" ? "🟢 Open" : sc.status === "CONSTRUCTION" ? "🟡 Coming soon" : sc.status;
+      const marker = L.marker([sc.gps.lat, sc.gps.lng], { icon: makeIcon(kw) }).addTo(map);
+      marker.bindPopup(`
+        <div class="popup-name">${sc.name}</div>
+        <div class="popup-stalls">⚡ ${stalls} stalls${kw ? ' · ' + kw + ' kW' : ''}</div>
+        <div class="popup-address">${addr}</div>
+        <div style="margin-top:6px;font-size:11px;color:#aaa">${status}</div>
+        ${kw >= 250 ? '<span class="popup-v3">V3 · 250kW</span>' : ''}
+      `);
+    });
+
+    if (piemonte.length === 0) showError("No Piemonte stations found in API response.");
+  } catch (err) {
+    showError("Could not load live data: " + err.message);
+  }
+}
+
+function showError(msg) {
+  document.getElementById("count").textContent = "Error loading data";
+  const div = L.control({ position: "bottomleft" });
+  div.onAdd = () => {
+    const el = L.DomUtil.create("div");
+    el.style = "background:#cc0000;color:#fff;padding:8px 12px;border-radius:6px;font-size:12px";
+    el.textContent = msg;
+    return el;
+  };
+  div.addTo(map);
+}
+
+loadSuperchargers();
+</script>
+</body>
+</html>
