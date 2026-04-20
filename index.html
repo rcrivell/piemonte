@@ -74,8 +74,8 @@ function makeIcon(kw) {
 
 async function loadSuperchargers() {
   // Overpass API: query all Tesla Superchargers in Piemonte (Italy) bounding box
-  const query = `[out:json][timeout:25];node["amenity"="charging_station"]["network"="Tesla Supercharger"](43.8,6.6,46.5,9.2);out body;`;
-  const url = "https://overpass.kumi.systems/api/interpreter?data=" + encodeURIComponent(query);
+  const query = `[out:json][timeout:25];(node["amenity"="charging_station"]["operator"~"Tesla",i](43.8,6.6,46.5,9.2);node["amenity"="charging_station"]["brand"~"Tesla",i](43.8,6.6,46.5,9.2);node["amenity"="charging_station"]["network"~"Tesla",i](43.8,6.6,46.5,9.2););out body;`;
+  const url = "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error("HTTP " + res.status);
