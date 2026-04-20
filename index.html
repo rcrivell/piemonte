@@ -164,10 +164,10 @@ Include accurate GPS coordinates for each location.`;
     const data = await res.json();
     let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    // Strip markdown code blocks if present
-    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-
-    const wines = JSON.parse(text);
+    // Extract JSON array from response (handles markdown code blocks)
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) throw new Error("No JSON array found in Gemini response");
+    const wines = JSON.parse(match[0]);
 
     wines.forEach(w => {
       const m = L.marker([w.lat, w.lng], { icon: makeIcon(0, true) }).addTo(map);
