@@ -164,6 +164,9 @@ Include accurate GPS coordinates for each location.`;
     const data = await res.json();
     let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
+    // Debug: show raw response
+    alert("Gemini raw response:\n" + text.substring(0, 500));
+
     // Extract JSON array from response (handles markdown code blocks)
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) throw new Error("No JSON array found in Gemini response");
