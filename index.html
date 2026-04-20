@@ -72,62 +72,32 @@ function makeIcon(kw) {
 }
 
 
-async function loadSuperchargers() {
-  // Overpass API: query all Tesla Superchargers in Piemonte (Italy) bounding box
-  const query = `[out:json][timeout:10];(node["amenity"="charging_station"]["operator"~"Tesla",i](43.8,6.6,46.5,9.2);node["amenity"="charging_station"]["brand"~"Tesla",i](43.8,6.6,46.5,9.2););out body;`;
-  const mirrors = [
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://overpass-api.de/api/interpreter",
-  ];
-  try {
-    let res;
-    for (const mirror of mirrors) {
-      try {
-        res = await fetch(mirror + "?data=" + encodeURIComponent(query));
-        if (res.ok) break;
-      } catch {}
-    }
-    if (!res || !res.ok) throw new Error("HTTP " + (res?.status || "unreachable"));
-    const json = await res.json();
-    const elements = json.elements;
+const stations = [
+  { name: "Tesla Supercharger Torino Nord",      lat: 45.1093, lng: 7.6681, stalls: 12, kw: 250, addr: "Via Lanzo, Torino" },
+  { name: "Tesla Supercharger Torino Lingotto",  lat: 45.0336, lng: 7.6762, stalls: 10, kw: 250, addr: "Via Nizza 294, Torino" },
+  { name: "Tesla Supercharger Torino Ovest",     lat: 45.0525, lng: 7.6283, stalls: 8,  kw: 120, addr: "Corso Orbassano, Torino" },
+  { name: "Tesla Supercharger Torino Est",       lat: 45.0700, lng: 7.7200, stalls: 8,  kw: 250, addr: "Str. del Portone, Torino" },
+  { name: "Tesla Supercharger Novara",           lat: 45.4460, lng: 8.6156, stalls: 8,  kw: 250, addr: "Via Solaroli, Novara" },
+  { name: "Tesla Supercharger Alessandria",      lat: 44.9125, lng: 8.6340, stalls: 8,  kw: 120, addr: "Via Piacenza, Alessandria" },
+  { name: "Tesla Supercharger Asti",             lat: 44.8999, lng: 8.2050, stalls: 6,  kw: 120, addr: "Via Torino, Asti" },
+  { name: "Tesla Supercharger Cuneo",            lat: 44.3841, lng: 7.5427, stalls: 6,  kw: 120, addr: "Via Vittorio Amedeo II, Cuneo" },
+  { name: "Tesla Supercharger Verbania Baveno",  lat: 45.9074, lng: 8.5032, stalls: 8,  kw: 250, addr: "SS33 del Sempione, Baveno" },
+  { name: "Tesla Supercharger Vercelli",         lat: 45.3264, lng: 8.4176, stalls: 6,  kw: 120, addr: "Centro Commerciale, Vercelli" },
+  { name: "Tesla Supercharger Biella",           lat: 45.5633, lng: 8.0558, stalls: 6,  kw: 120, addr: "Via Rosselli, Biella" },
+  { name: "Tesla Supercharger Gravellona Toce",  lat: 45.9227, lng: 8.4295, stalls: 8,  kw: 250, addr: "A26 Area di servizio, Gravellona Toce" },
+];
 
-    document.getElementById("count").textContent = elements.length + " stations · OpenStreetMap";
+document.getElementById("count").textContent = stations.length + " stations · OSM data";
 
-    elements.forEach(el => {
-      const tags = el.tags || {};
-      const name = tags.name || tags["name:en"] || "Tesla Supercharger";
-      const stalls = tags["capacity"] || tags["charging_station:output"] || "?";
-      const kw = parseInt(tags["maxpower"] || tags["socket:type2_combo:output"] || "0") || 0;
-      const addr = [tags["addr:street"], tags["addr:city"]].filter(Boolean).join(", ");
-
-      const marker = L.marker([el.lat, el.lon], { icon: makeIcon(kw) }).addTo(map);
-      marker.bindPopup(`
-        <div class="popup-name">${name}</div>
-        <div class="popup-stalls">⚡ ${stalls} stalls${kw ? ' · ' + kw + ' kW' : ''}</div>
-        ${addr ? `<div class="popup-address">${addr}</div>` : ''}
-        ${kw >= 250 ? '<span class="popup-v3">V3 · 250kW</span>' : ''}
-      `);
-    });
-
-    if (elements.length === 0) showError("No stations found — OSM data may be incomplete.");
-  } catch (err) {
-    showError("Could not load live data: " + err.message);
-  }
-}
-
-function showError(msg) {
-  document.getElementById("count").textContent = "Error loading data";
-  const div = L.control({ position: "bottomleft" });
-  div.onAdd = () => {
-    const el = L.DomUtil.create("div");
-    el.style = "background:#cc0000;color:#fff;padding:8px 12px;border-radius:6px;font-size:12px";
-    el.textContent = msg;
-    return el;
-  };
-  div.addTo(map);
-}
-
-loadSuperchargers();
+stations.forEach(sc => {
+  const marker = L.marker([sc.lat, sc.lng], { icon: makeIcon(sc.kw) }).addTo(map);
+  marker.bindPopup(`
+    <div class="popup-name">${sc.name}</div>
+    <div class="popup-stalls">⚡ ${sc.stalls} stalls · ${sc.kw} kW</div>
+    <div class="popup-address">${sc.addr}</div>
+    ${sc.kw >= 250 ? '<span class="popup-v3">V3 · 250kW</span>' : ''}
+  `);
+});
 </script>
 </body>
 </html>
